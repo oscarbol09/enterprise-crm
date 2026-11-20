@@ -4,7 +4,7 @@
 # ==============================================================================
 
 # Stage 1: Build & Dependency Resolution
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.15-slim-bookworm AS builder
 
 WORKDIR /build
 
@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 
 
 # Stage 2: Minimal Distroless/Production Runtime
-FROM python:3.12-slim-bookworm AS runner
+FROM python:3.15-slim-bookworm AS runner
 
 WORKDIR /app
 
