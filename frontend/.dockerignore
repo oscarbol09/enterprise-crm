@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+coverage/
+.env
+.env.*
+src/__tests__/
+src/mocks/
+vitest.config.ts
+vitest.setup.ts

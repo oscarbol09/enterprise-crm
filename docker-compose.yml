@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: crm-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crm_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-crm_enterprise_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm_user} -d ${POSTGRES_DB:-crm_enterprise_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crm_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: crm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crm_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crm-backend
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://crm_app:crm_app_dev_pass@postgres:5432/crm_enterprise_db}
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql+asyncpg://crm_user:crm_secure_pass@postgres:5432/crm_enterprise_db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-jwt-secret-key-change-before-staging-or-prod-32bytes}
+      APPLICATION_ENCRYPTION_KEY_B64: ${APPLICATION_ENCRYPTION_KEY_B64:-ZGV2LW9ubHktMzItYnl0ZS1hZXMta2V5LWNoYW5nZSE=}
+      ALLOW_OFFLINE_AI_STUB: ${ALLOW_OFFLINE_AI_STUB:-true}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-["http://localhost:3000","http://127.0.0.1:3000"]}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crm_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    container_name: crm-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - crm_net
+
+volumes:
+  pg_data:
+  redis_data:
+
+networks:
+  crm_net:
+    driver: bridge
