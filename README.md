@@ -148,3 +148,9 @@ npm run build
 - **Outbox Worker Execution**: Domain events are recorded atomically in `outbox_events` and claimed via `SELECT ... FOR UPDATE SKIP LOCKED` in `outbox_service.py`, ready to be invoked by a scheduled worker or webhook dispatcher; no separate background scheduler daemon is spawned inside the web worker containers.
 - **Session Persistence on Page Reload**: Access tokens are kept strictly in JavaScript memory (mitigating XSS exfiltration of bearer tokens via `localStorage`), paired with an `httpOnly` refresh cookie (`Path=/api/v1/auth`). In cross-origin local development (`localhost:3000` -> `localhost:8000`) or browsers blocking third-party cookies in production, both origin hosts should share a parent site behind a reverse proxy or BFF.
 - **SQLite vs. PostgreSQL Parity in Local Runs**: When `TEST_POSTGRES_URL` is unset, `tests/test_postgres_rls_integration.py` is skipped cleanly because SQLite lacks PostgreSQL RLS and `pgvector` operators; full Forced RLS verification executes inside GitHub Actions against `pgvector/pgvector:pg16`.
+
+## Contributing, Security & License
+
+- Contributions: read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) first.
+- Vulnerabilities: report them privately as described in [SECURITY.md](SECURITY.md), not in public issues.
+- License: [PolyForm Noncommercial 1.0.0](LICENSE). You may use, modify, and share the code for noncommercial purposes (personal use, study, research, hobby projects, and noncommercial organizations). Commercial use requires separate permission from the maintainer. This is a source-available license, not an OSI-approved open source license, so GitHub may show it as "Other".

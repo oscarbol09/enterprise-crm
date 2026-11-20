@@ -2,6 +2,11 @@
 
 All notable changes to Enterprise CRM are documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
 
+## [Unreleased]
+
+### Added
+- Community and governance files: `LICENSE` (PolyForm Noncommercial 1.0.0), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), issue and pull request templates, `CODEOWNERS`, and Dependabot configuration.
+
 ## [1.0.0] - 2026-11-20
 
 ### Security
