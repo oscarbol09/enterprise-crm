@@ -4,31 +4,55 @@ updates:
     directory: "/backend"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      backend-minor-patch:
+        update-types: ["minor", "patch"]
+
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      frontend-minor-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Tailwind 4 needs a dedicated migration (CSS-first config, new PostCSS plugin).
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+
+  # Base image majors must move together with the CI Python/Node versions.
   - package-ecosystem: "docker"
     directory: "/backend"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "chore(docker)"
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
   - package-ecosystem: "docker"
     directory: "/frontend"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "chore(docker)"
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "ci(deps)"
+    groups:
+      actions:
+        update-types: ["minor", "patch"]
