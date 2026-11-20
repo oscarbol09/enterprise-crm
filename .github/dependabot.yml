@@ -5,6 +5,7 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    versioning-strategy: increase-if-necessary
     commit-message:
       prefix: "chore(deps)"
     groups:
