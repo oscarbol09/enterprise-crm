@@ -1,0 +1,62 @@
+[project]
+name = "enterprise-crm-backend"
+version = "1.0.0"
+description = "Multi-Tenant Enterprise CRM Backend with PostgreSQL RLS, BYOK Vault, and Agentic AI Copilot"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["."]
+markers = [
+    "postgres: integration tests requiring a live PostgreSQL + pgvector instance",
+]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+concurrency = ["greenlet", "thread"]
+omit = [
+    "src/core/seed.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 110
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "S", "ASYNC", "UP"]
+ignore = [
+    "E501",   # Line length handled pragmatically for long SQL/docstrings
+    "B008",   # FastAPI Depends() in function defaults is idiomatic
+    "S104",   # 0.0.0.0 binding when explicitly intended
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S107"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+ignore_missing_imports = true
+exclude = ["alembic/versions"]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "alembic"]
+skips = []
