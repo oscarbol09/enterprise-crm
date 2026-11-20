@@ -25,7 +25,14 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 
-RUN addgroup -g 10001 -S nextgroup && \
+RUN apk upgrade --no-cache && \
+    rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm \
+           /usr/local/bin/npx \
+           /usr/local/bin/corepack \
+           /opt/yarn* && \
+    addgroup -g 10001 -S nextgroup && \
     adduser -S -u 10001 -G nextgroup nextjs
 
 COPY --from=builder --chown=nextjs:nextgroup /app/.next/standalone ./
