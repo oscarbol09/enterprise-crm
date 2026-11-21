@@ -104,6 +104,8 @@ class Account(Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONVariant, default=dict, nullable=False)
+    merged_into_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -128,11 +130,43 @@ class Contact(Base):
     job_title: Mapped[str | None] = mapped_column(String(150), nullable=True)
     lead_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0.00"), nullable=False)
     lifecycle_stage: Mapped[str] = mapped_column(String(50), default="lead", nullable=False)
+    source_channel: Mapped[str | None] = mapped_column(String(100), nullable=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONVariant, default=dict, nullable=False)
+    merged_into_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     __table_args__ = (UniqueConstraint("tenant_id", "email", name="uq_tenant_contact_email"),)
+
+
+class CompanyAffiliation(Base):
+    """Multi-entity B2B relationship allowing a person to hold roles across multiple companies."""
+
+    __tablename__ = "company_affiliations"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
+    )
+    contact_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False
+    )
+    role_title: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    started_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ended_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "account_id", "contact_id", name="uq_tenant_account_contact_affiliation"),
+    )
 
 
 class Pipeline(Base):
@@ -201,14 +235,111 @@ class Deal(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    exchange_rate_to_usd: Mapped[Decimal] = mapped_column(
+        Numeric(14, 6), default=Decimal("1.000000"), nullable=False
+    )
+    normalized_amount_usd: Mapped[Decimal] = mapped_column(
+        Numeric(15, 2), default=Decimal("0.00"), nullable=False
+    )
     expected_close_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     forecast_category: Mapped[str] = mapped_column(String(50), default="pipeline", nullable=False)
     win_probability: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
     is_won: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_lost: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     loss_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    loss_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    competitor_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    missing_feature_tag: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_channel: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONVariant, default=dict, nullable=False)
+    stage_entered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    last_interaction_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_inbound_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_outbound_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    close_date_push_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class DealParticipant(Base):
+    """B2B Buying Committee junction table linking multiple stakeholders to a Deal with explicit roles."""
+
+    __tablename__ = "deal_participants"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    deal_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("deals.id", ondelete="CASCADE"), nullable=False
+    )
+    contact_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False
+    )
+    buying_role: Mapped[str] = mapped_column(String(50), default="stakeholder", nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "deal_id", "contact_id", name="uq_tenant_deal_participant"),)
+
+
+class DealStageHistory(Base):
+    """SCD Type 2 Stage History tracking stage dwell time, conversion paths, and point-in-time amounts."""
+
+    __tablename__ = "deal_stage_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    deal_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("deals.id", ondelete="CASCADE"), nullable=False
+    )
+    from_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True
+    )
+    to_stage_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("pipeline_stages.id", ondelete="RESTRICT"), nullable=False
+    )
+    amount_at_transition: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"), nullable=False)
+    win_probability_at_transition: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("0.10"), nullable=False
+    )
+    expected_close_date_at_transition: Mapped[date | None] = mapped_column(Date, nullable=True)
+    changed_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    entered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    exited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class CustomFieldDefinition(Base):
+    """Tenant-scoped metadata registry defining dynamic custom fields and validation constraints."""
+
+    __tablename__ = "custom_field_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # account, contact, deal
+    field_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    label: Mapped[str] = mapped_column(String(150), nullable=False)
+    field_type: Mapped[str] = mapped_column(String(50), nullable=False)  # text, number, boolean, date, select, multi_select
+    is_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    min_stage_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    allowed_values: Mapped[list[str]] = mapped_column(JSONVariant, default=list, nullable=False)
+    is_indexed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "entity_type", "field_key", name="uq_tenant_entity_custom_field"),
+    )
 
 
 class Interaction(Base):
@@ -222,13 +353,13 @@ class Interaction(Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     contact_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="CASCADE"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
     )
     account_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("accounts.id", ondelete="CASCADE"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
     )
     deal_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("deals.id", ondelete="CASCADE"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("deals.id", ondelete="SET NULL"), nullable=True
     )
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     direction: Mapped[str] = mapped_column(String(20), default="outbound", nullable=False)
@@ -237,6 +368,57 @@ class Interaction(Base):
     encrypted_payload: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONVariant, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SyncedEmailMessage(Base):
+    """Idempotent RFC 5322 email ingestion ledger preventing duplicate timeline entries across CC'd reps."""
+
+    __tablename__ = "synced_email_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    rfc_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    in_reply_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sender_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    recipient_emails: Mapped[list[str]] = mapped_column(JSONVariant, default=list, nullable=False)
+    synced_mailboxes: Mapped[list[str]] = mapped_column(JSONVariant, default=list, nullable=False)
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("interactions.id", ondelete="SET NULL"), nullable=True
+    )
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("deals.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "rfc_message_id", name="uq_tenant_rfc_message_id"),)
+
+
+class EntityAuditLog(Base):
+    """Immutable system audit trail separate from business activity timelines."""
+
+    __tablename__ = "entity_audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # account, contact, deal, custom_field
+    entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)  # CREATE, UPDATE, SOFT_DELETE, MERGE, STAGE_CHANGE
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    changes: Mapped[dict[str, Any]] = mapped_column(JSONVariant, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -254,10 +436,10 @@ class Task(Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     contact_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="CASCADE"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
     )
     deal_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("deals.id", ondelete="CASCADE"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("deals.id", ondelete="SET NULL"), nullable=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -367,3 +549,50 @@ class TenantLLMCredential(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     __table_args__ = (UniqueConstraint("tenant_id", "provider", name="uq_tenant_provider"),)
+
+
+class ImportBatch(Base):
+    """Tracks CSV import batches to allow atomic one-click rollback of created records."""
+
+    __tablename__ = "import_batches"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    entity_scope: Mapped[str] = mapped_column(String(50), default="contacts_bundle", nullable=False)
+    created_account_ids: Mapped[list[str]] = mapped_column(JSONVariant, default=list, nullable=False)
+    created_contact_ids: Mapped[list[str]] = mapped_column(JSONVariant, default=list, nullable=False)
+    created_deal_ids: Mapped[list[str]] = mapped_column(JSONVariant, default=list, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="committed", nullable=False)
+    rolled_back_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PipelineSnapshot(Base):
+    """Point-in-time daily/periodic snapshot of deal pipeline amounts for Waterfall Bridge reporting."""
+
+    __tablename__ = "pipeline_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
+    deal_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("deals.id", ondelete="CASCADE"), nullable=False
+    )
+    stage_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    normalized_amount_usd: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"), nullable=False)
+    forecast_category: Mapped[str] = mapped_column(String(50), default="pipeline", nullable=False)
+    expected_close_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_won: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_lost: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "snapshot_date", "deal_id", name="uq_tenant_snapshot_date_deal"),
+    )
