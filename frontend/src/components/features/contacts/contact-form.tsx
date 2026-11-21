@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useState, useEffect } from "react";
-import { AlertCircle, Briefcase, Mail, Phone, Save } from "lucide-react";
+import { AlertCircle, Briefcase, Building2, Mail, Phone, Save, Wand2 } from "lucide-react";
+import { Account } from "../../../types/crm";
 import { Button } from "../../ui/button";
 
 export interface ContactFormData {
@@ -16,6 +17,7 @@ export interface ContactFormData {
 
 interface ContactFormProps {
   initialValues?: Partial<ContactFormData>;
+  accounts?: Account[];
   onSubmit: (data: ContactFormData) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
@@ -44,8 +46,14 @@ function buildInitialContactState(initialValues?: Partial<ContactFormData>): Con
   return base;
 }
 
+function capitalizeWord(word: string): string {
+  if (!word) return "";
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
 export function ContactForm({
   initialValues,
+  accounts = [],
   onSubmit,
   onCancel,
   isLoading = false,
@@ -98,6 +106,34 @@ export function ContactForm({
         [name]: error || "",
       }));
     }
+  };
+
+  const handleInferFromEmail = () => {
+    const rawEmail = formData.email.trim().toLowerCase();
+    if (!rawEmail.includes("@")) return;
+    const [localPart, domainPart] = rawEmail.split("@");
+    const tokens = localPart.split(/[._-]+/).filter(Boolean);
+
+    setFormData((prev) => {
+      const next = { ...prev };
+      if (!next.first_name && tokens[0]) {
+        next.first_name = capitalizeWord(tokens[0]);
+      }
+      if (!next.last_name && tokens[1]) {
+        next.last_name = capitalizeWord(tokens[1]);
+      }
+      if (!next.account_id && domainPart && accounts.length > 0) {
+        const matchedAcc = accounts.find(
+          (a) =>
+            (a.website && a.website.toLowerCase().includes(domainPart)) ||
+            a.name.toLowerCase().replace(/\s+/g, "").includes(domainPart.split(".")[0])
+        );
+        if (matchedAcc) {
+          next.account_id = matchedAcc.id;
+        }
+      }
+      return next;
+    });
   };
 
   const handleBlur = (name: keyof ContactFormData) => {
@@ -176,7 +212,7 @@ export function ContactForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-5 p-6 bg-card border border-border rounded-xl shadow-card max-w-2xl w-full"
+      className="flex flex-col gap-5 p-6 bg-card border border-border rounded-lg shadow-card max-w-2xl w-full"
       noValidate
       aria-label="Formulario de creación de contacto"
     >
@@ -184,7 +220,7 @@ export function ContactForm({
         <div>
           <h2 className="text-base font-semibold text-foreground">Crear Nuevo Contacto</h2>
           <p className="text-xs text-muted-foreground">
-            Registre una persona y vincúlela al pipeline del CRM.
+            Registre una persona y vincúlela a su empresa y pipeline comercial.
           </p>
         </div>
         {lastSavedTimestamp && (
@@ -206,6 +242,52 @@ export function ContactForm({
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="email"
+              className="text-xs font-medium text-foreground flex items-center justify-between"
+            >
+              <span>
+                Correo Electrónico Corporativo <span className="text-destructive">*</span>
+              </span>
+            </label>
+            {formData.email.includes("@") && (
+              <button
+                type="button"
+                onClick={handleInferFromEmail}
+                className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+              >
+                <Wand2 className="h-3 w-3" />
+                <span>Autocompletar nombre y empresa por dominio</span>
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? "email-error" : undefined}
+              className={`w-full h-10 pl-9 pr-3 bg-background border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary ${
+                errors.email ? "border-destructive focus:ring-destructive" : "border-border"
+              }`}
+              placeholder="carlos.gomez@empresa.com"
+              value={formData.email}
+              onChange={(e) => handleChange("email", e.target.value)}
+              onBlur={() => handleBlur("email")}
+            />
+          </div>
+          {errors.email && (
+            <span id="email-error" className="text-[11px] text-destructive flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> {errors.email}
+            </span>
+          )}
+        </div>
+
         <div className="flex flex-col gap-1.5">
           <label
             htmlFor="first_name"
@@ -268,40 +350,6 @@ export function ContactForm({
           )}
         </div>
 
-        <div className="flex flex-col gap-1.5 sm:col-span-2">
-          <label
-            htmlFor="email"
-            className="text-xs font-medium text-foreground flex items-center justify-between"
-          >
-            <span>
-              Correo Electrónico Corporativo <span className="text-destructive">*</span>
-            </span>
-          </label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? "email-error" : undefined}
-              className={`w-full h-10 pl-9 pr-3 bg-background border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary ${
-                errors.email ? "border-destructive focus:ring-destructive" : "border-border"
-              }`}
-              placeholder="carlos.gomez@empresa.com"
-              value={formData.email}
-              onChange={(e) => handleChange("email", e.target.value)}
-              onBlur={() => handleBlur("email")}
-            />
-          </div>
-          {errors.email && (
-            <span id="email-error" className="text-[11px] text-destructive flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" /> {errors.email}
-            </span>
-          )}
-        </div>
-
         <div className="flex flex-col gap-1.5">
           <label htmlFor="phone" className="text-xs font-medium text-foreground">
             Teléfono Móvil / Directo
@@ -343,7 +391,35 @@ export function ContactForm({
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 sm:col-span-2">
+        {accounts.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="account_id" className="text-xs font-medium text-foreground">
+              Empresa Primaria
+            </label>
+            <div className="relative">
+              <Building2
+                className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <select
+                id="account_id"
+                name="account_id"
+                value={formData.account_id || ""}
+                onChange={(e) => handleChange("account_id", e.target.value)}
+                className="w-full h-10 pl-9 pr-3 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Sin empresa vinculada</option>
+                {accounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        <div className={`flex flex-col gap-1.5 ${accounts.length > 0 ? "" : "sm:col-span-2"}`}>
           <label htmlFor="lifecycle_stage" className="text-xs font-medium text-foreground">
             Etapa de Ciclo de Vida
           </label>

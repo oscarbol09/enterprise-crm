@@ -123,6 +123,7 @@ describe("DealKanbanBoard", () => {
       expect(capturedBody).toEqual({
         new_stage_id: "st-3",
         loss_reason: "Presupuesto diferido",
+        loss_category: "price",
       });
     });
   });

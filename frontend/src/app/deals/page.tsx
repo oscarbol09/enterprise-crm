@@ -1,29 +1,30 @@
 "use client";
 
 import React, { Suspense, useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
-  Calendar,
+  Kanban,
   Layers,
   Plus,
   RefreshCw,
-  Sparkles,
+  Table2,
   X,
 } from "lucide-react";
-import { Contact, Deal, InteractionItem, PipelineStage } from "../../types/crm";
+import { Account, Contact, Deal, PipelineStage } from "../../types/crm";
 import {
   ApiError,
   bootstrapPipeline,
   createDeal,
+  fetchAccounts,
   fetchContacts,
-  fetchDealInteractions,
   fetchDeals,
   fetchPipelineStages,
 } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 import { DealKanbanBoard } from "../../components/features/deals/deal-kanban-board";
+import { DealDataGrid } from "../../components/features/deals/deal-data-grid";
+import { DealPeekDrawer } from "../../components/features/deals/deal-peek-drawer";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 
@@ -32,24 +33,27 @@ function DealsPageContent() {
   const searchParams = useSearchParams();
   const { accessToken, user } = useAuth();
 
+  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Create Deal Modal
+  // Create Deal Modal (Progressive disclosure: Title + Amount + Currency + Stage)
   const [isCreateOpen, setIsCreateOpen] = useState<boolean>(false);
   const [newTitle, setNewTitle] = useState("");
   const [newAmount, setNewAmount] = useState("25000");
+  const [newCurrency, setNewCurrency] = useState("USD");
   const [newStageId, setNewStageId] = useState("");
   const [newContactId, setNewContactId] = useState("");
+  const [newAccountId, setNewAccountId] = useState("");
+  const [newCloseDate, setNewCloseDate] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
-  // Deal Detail Drawer/Modal
+  // Selected Deal for Slide-over Peek Drawer
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
-  const [dealInteractions, setDealInteractions] = useState<InteractionItem[]>([]);
-  const [isLoadingInteractions, setIsLoadingInteractions] = useState(false);
 
   const wantsNewFromQuery = searchParams.get("new") === "1";
   const showCreateModal = isCreateOpen || wantsNewFromQuery;
@@ -65,14 +69,16 @@ function DealsPageContent() {
     setIsLoading(true);
     setError(null);
     try {
-      const [fetchedStages, fetchedDeals, fetchedContacts] = await Promise.all([
+      const [fetchedStages, fetchedDeals, fetchedContacts, fetchedAccounts] = await Promise.all([
         fetchPipelineStages(accessToken ?? undefined),
         fetchDeals(accessToken ?? undefined),
         fetchContacts(accessToken ?? undefined),
+        fetchAccounts(accessToken ?? undefined).catch(() => []),
       ]);
       setStages(fetchedStages);
       setDeals(fetchedDeals);
       setContacts(fetchedContacts);
+      setAccounts(fetchedAccounts);
       if (fetchedStages.length > 0 && !newStageId) {
         setNewStageId(fetchedStages[0].id);
       }
@@ -89,15 +95,17 @@ function DealsPageContent() {
     let active = true;
     async function initPipeline() {
       try {
-        const [fetchedStages, fetchedDeals, fetchedContacts] = await Promise.all([
+        const [fetchedStages, fetchedDeals, fetchedContacts, fetchedAccounts] = await Promise.all([
           fetchPipelineStages(accessToken ?? undefined),
           fetchDeals(accessToken ?? undefined),
           fetchContacts(accessToken ?? undefined),
+          fetchAccounts(accessToken ?? undefined).catch(() => []),
         ]);
         if (!active) return;
         setStages(fetchedStages);
         setDeals(fetchedDeals);
         setContacts(fetchedContacts);
+        setAccounts(fetchedAccounts);
         if (fetchedStages.length > 0) {
           setNewStageId((prev) => prev || fetchedStages[0].id);
         }
@@ -148,12 +156,16 @@ function DealsPageContent() {
           title: newTitle.trim(),
           stage_id: newStageId,
           amount: Number(newAmount) || 0,
-          currency: "USD",
+          currency: newCurrency,
           contact_id: newContactId || undefined,
+          account_id: newAccountId || undefined,
+          expected_close_date: newCloseDate || undefined,
         },
         accessToken ?? undefined
       );
       setNewTitle("");
+      setNewCloseDate("");
+      setNewCurrency("USD");
       closeCreateModal();
       await loadPipelineData();
     } catch (err: unknown) {
@@ -163,43 +175,97 @@ function DealsPageContent() {
     }
   };
 
-  const handleOpenDealDetail = async (deal: Deal) => {
-    setSelectedDeal(deal);
-    setIsLoadingInteractions(true);
-    try {
-      const timeline = await fetchDealInteractions(deal.id, accessToken ?? undefined);
-      setDealInteractions(timeline);
-    } catch {
-      setDealInteractions([]);
-    } finally {
-      setIsLoadingInteractions(false);
-    }
+  const handleNavigateDealInDrawer = (direction: "prev" | "next") => {
+    if (!selectedDeal || deals.length <= 1) return;
+    const idx = deals.findIndex((d) => d.id === selectedDeal.id);
+    if (idx === -1) return;
+    const nextIdx =
+      direction === "next"
+        ? (idx + 1) % deals.length
+        : (idx - 1 + deals.length) % deals.length;
+    setSelectedDeal(deals[nextIdx]);
   };
 
-  const totalPipelineValue = deals.reduce(
-    (acc, d) => acc + (d.is_lost ? 0 : Number(d.amount)),
+  const activeDeals = deals.filter((d) => !d.is_lost);
+  const totalPipelineValue = activeDeals.reduce(
+    (acc, d) => acc + Number(d.normalized_amount_usd ?? d.amount),
     0
   );
+  const weightedPipelineValue = activeDeals.reduce(
+    (acc, d) => acc + Number(d.normalized_amount_usd ?? d.amount) * Number(d.win_probability),
+    0
+  );
+  const commitPipelineValue = activeDeals
+    .filter((d) => d.forecast_category === "commit" || d.is_won)
+    .reduce((acc, d) => acc + Number(d.normalized_amount_usd ?? d.amount), 0);
 
   return (
-    <div className="flex flex-col h-full p-6 gap-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border">
-        <div className="flex flex-col">
+    <div className="flex flex-col h-full p-6 gap-5">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-border">
+        <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-foreground">Pipeline de Ventas</h1>
-            <Badge variant="secondary" className="font-mono text-xs">
+            <Badge variant="secondary" className="font-mono text-xs tabular-nums">
               {deals.length} oportunidades
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Valor activo total:{" "}
-            <span className="font-semibold font-mono text-foreground">
-              ${totalPipelineValue.toLocaleString("en-US", { minimumFractionDigits: 0 })} USD
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground tabular-nums">
+            <span>
+              Bruto Activo:{" "}
+              <strong className="font-mono text-foreground">
+                ${totalPipelineValue.toLocaleString("en-US", { minimumFractionDigits: 0 })} USD
+              </strong>
             </span>
-          </p>
+            <span>·</span>
+            <span>
+              Ponderado:{" "}
+              <strong className="font-mono text-primary">
+                ${Math.round(weightedPipelineValue).toLocaleString("en-US")} USD
+              </strong>
+            </span>
+            <span>·</span>
+            <span>
+              En Commit / Ganado:{" "}
+              <strong className="font-mono text-foreground">
+                ${commitPipelineValue.toLocaleString("en-US", { minimumFractionDigits: 0 })} USD
+              </strong>
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Kanban vs High-Density Data Grid Switcher */}
+          <div
+            className="inline-flex items-center p-0.5 bg-muted border border-border rounded-lg"
+            role="group"
+            aria-label="Cambiar vista del pipeline"
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode("kanban")}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewMode === "kanban"
+                  ? "bg-card text-foreground shadow-subtle"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Kanban className="h-3.5 w-3.5" />
+              <span>Kanban</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewMode === "table"
+                  ? "bg-card text-foreground shadow-subtle"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Table2 className="h-3.5 w-3.5" />
+              <span>Tabla Densa</span>
+            </button>
+          </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -245,7 +311,7 @@ function DealsPageContent() {
       )}
 
       {!isLoading && stages.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 border border-dashed border-border rounded-xl bg-card text-center gap-3">
+        <div className="flex flex-col items-center justify-center p-12 border border-dashed border-border rounded-lg bg-card text-center gap-3">
           <Layers className="h-8 w-8 text-muted-foreground/60" />
           <h2 className="text-sm font-semibold text-foreground">
             Este workspace aún no tiene etapas de pipeline configuradas
@@ -259,18 +325,33 @@ function DealsPageContent() {
             </Button>
           )}
         </div>
-      ) : (
+      ) : viewMode === "kanban" ? (
         <div className="flex-1 min-h-0">
           <DealKanbanBoard
             stages={stages}
             initialDeals={deals}
             authToken={accessToken ?? undefined}
             isLoading={isLoading}
-            onDealClick={handleOpenDealDetail}
+            onDealClick={(deal) => setSelectedDeal(deal)}
             onCreateDeal={user?.role === "readonly" ? undefined : handleOpenCreateModal}
-            onDealMoved={(updated) =>
-              setDeals((prev) => prev.map((d) => (d.id === updated.id ? updated : d)))
-            }
+            onDealMoved={(updated) => {
+              setDeals((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+              if (selectedDeal?.id === updated.id) setSelectedDeal(updated);
+            }}
+          />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0">
+          <DealDataGrid
+            stages={stages}
+            deals={deals}
+            authToken={accessToken ?? undefined}
+            isReadonly={user?.role === "readonly"}
+            onDealClick={(deal) => setSelectedDeal(deal)}
+            onDealUpdated={(updated) => {
+              setDeals((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+              if (selectedDeal?.id === updated.id) setSelectedDeal(updated);
+            }}
           />
         </div>
       )}
@@ -287,7 +368,7 @@ function DealsPageContent() {
           <form
             onSubmit={handleCreateDealSubmit}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md p-6 bg-card border border-border rounded-xl shadow-elevated flex flex-col gap-4"
+            className="w-full max-w-md p-6 bg-card border border-border rounded-lg shadow-elevated flex flex-col gap-4"
           >
             <div className="flex items-center justify-between pb-2 border-b border-border">
               <h2 className="text-base font-semibold text-foreground">Nueva Oportunidad</h2>
@@ -315,10 +396,10 @@ function DealsPageContent() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="deal-amount" className="text-xs font-medium">
-                  Monto (USD)
+                  Monto
                 </label>
                 <input
                   id="deal-amount"
@@ -329,6 +410,25 @@ function DealsPageContent() {
                   onChange={(e) => setNewAmount(e.target.value)}
                   className="h-10 px-3 bg-background border border-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
                 />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="deal-currency" className="text-xs font-medium">
+                  Divisa
+                </label>
+                <select
+                  id="deal-currency"
+                  value={newCurrency}
+                  onChange={(e) => setNewCurrency(e.target.value)}
+                  className="h-10 px-2 bg-background border border-border rounded-md text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="MXN">MXN ($)</option>
+                  <option value="COP">COP ($)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="BRL">BRL (R$)</option>
+                </select>
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -350,9 +450,43 @@ function DealsPageContent() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="deal-account" className="text-xs font-medium">
+                  Empresa (opcional)
+                </label>
+                <select
+                  id="deal-account"
+                  value={newAccountId}
+                  onChange={(e) => setNewAccountId(e.target.value)}
+                  className="h-10 px-2 bg-background border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Auto-detectar por contacto</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="deal-close-date" className="text-xs font-medium">
+                  Fecha Estimada Cierre
+                </label>
+                <input
+                  id="deal-close-date"
+                  type="date"
+                  value={newCloseDate}
+                  onChange={(e) => setNewCloseDate(e.target.value)}
+                  className="h-10 px-2.5 bg-background border border-border rounded-md text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+
             <div className="flex flex-col gap-1.5">
               <label htmlFor="deal-contact" className="text-xs font-medium">
-                Contacto Asociado (opcional)
+                Contacto Champion (opcional)
               </label>
               <select
                 id="deal-contact"
@@ -381,87 +515,15 @@ function DealsPageContent() {
         </div>
       )}
 
-      {/* Deal Detail & Timeline Modal */}
-      {selectedDeal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Detalle de ${selectedDeal.title}`}
-          onClick={() => setSelectedDeal(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg p-6 bg-card border border-border rounded-xl shadow-elevated flex flex-col gap-4 max-h-[85vh] overflow-y-auto"
-          >
-            <div className="flex items-start justify-between gap-2 pb-3 border-b border-border">
-              <div>
-                <h2 className="text-base font-bold text-foreground">{selectedDeal.title}</h2>
-                <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                  ${Number(selectedDeal.amount).toLocaleString("en-US")} {selectedDeal.currency} ·
-                  Probabilidad {Math.round(Number(selectedDeal.win_probability) * 100)}% ·
-                  Forecast: {selectedDeal.forecast_category}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedDeal(null)}
-                aria-label="Cerrar detalle"
-                className="p-1 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {selectedDeal.loss_reason && (
-              <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-xs text-destructive">
-                <strong>Motivo de pérdida:</strong> {selectedDeal.loss_reason}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Historial de Actividad
-              </h3>
-              {selectedDeal.contact_id && (
-                <Link
-                  href={`/ai?contactId=${selectedDeal.contact_id}&dealId=${selectedDeal.id}`}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>Analizar con Copilot IA</span>
-                </Link>
-              )}
-            </div>
-
-            {isLoadingInteractions ? (
-              <p className="text-xs text-muted-foreground animate-pulse">Cargando timeline...</p>
-            ) : dealInteractions.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">
-                Aún no hay interacciones registradas para esta oportunidad.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {dealInteractions.map((item) => (
-                  <li
-                    key={item.id}
-                    className="p-3 rounded-lg bg-muted/40 border border-border text-xs flex flex-col gap-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground">{item.subject}</span>
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(item.occurred_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <p className="text-muted-foreground">{item.content_body}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Slide-over Peek Drawer (Replaces centered read-only modal) */}
+      <DealPeekDrawer
+        deal={selectedDeal}
+        stages={stages}
+        contacts={contacts}
+        authToken={accessToken ?? undefined}
+        onClose={() => setSelectedDeal(null)}
+        onNavigateDeal={deals.length > 1 ? handleNavigateDealInDrawer : undefined}
+      />
     </div>
   );
 }
