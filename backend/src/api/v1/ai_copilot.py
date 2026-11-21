@@ -46,6 +46,7 @@ from src.services.ai_service import (
     MultiModelRouter,
     parse_llm_analysis_json,
 )
+from src.services.audit_service import resolve_interaction_hierarchy
 from src.services.embedding_service import semantic_search, upsert_entity_embedding
 from src.services.pipeline_service import apply_deal_stage_transition
 
@@ -136,12 +137,20 @@ async def summarize_interaction(
 
     # Phase 3: Short-lived write transaction (persist audit log, interaction note, embedding, proposals)
     async with tenant_session_scope(current_user.tenant_id) as write_db:
+        resolved_account_id, resolved_deal_id, resolved_contact_id = await resolve_interaction_hierarchy(
+            write_db,
+            tenant_id=current_user.tenant_id,
+            account_id=None,
+            deal_id=payload.deal_id,
+            contact_id=payload.contact_id,
+        )
         interaction = Interaction(
             id=uuid.uuid4(),
             tenant_id=current_user.tenant_id,
             user_id=current_user.id,
-            contact_id=payload.contact_id,
-            deal_id=payload.deal_id,
+            contact_id=resolved_contact_id,
+            account_id=resolved_account_id,
+            deal_id=resolved_deal_id,
             type=payload.interaction_type,
             direction="outbound",
             subject=f"Resumen Copilot ({payload.interaction_type})",

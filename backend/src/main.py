@@ -43,6 +43,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Correlation-ID", "X-Tenant-ID"],
+    expose_headers=["X-Next-Cursor", "X-Correlation-ID", "X-Stage-Gate-Fields"],
     max_age=600,
 )
 

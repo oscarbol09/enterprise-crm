@@ -1,5 +1,5 @@
 """
-Authentication API Router: Workspace Registration, Login, Refresh Rotation & Logout.
+Authentication API Router: Workspace Registration, Login, Refresh Rotation, Logout & Workspace Governance Settings.
 """
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.database import get_raw_db
-from src.core.dependencies import get_current_user, get_tenant_db
+from src.core.dependencies import get_current_user, get_tenant_db, require_roles
 from src.core.rate_limit import rate_limit
 from src.models.entities import Tenant
 from src.schemas.crm import (
@@ -18,6 +18,8 @@ from src.schemas.crm import (
     RefreshRequest,
     RegisterWorkspaceRequest,
     UserInfoResponse,
+    WorkspaceSettingsResponse,
+    WorkspaceSettingsUpdate,
 )
 from src.services.auth_service import (
     AmbiguousTenantError,
@@ -175,4 +177,59 @@ async def get_me(
         role=current_user.role,
         tenant_name=tenant.name if tenant else None,
         tenant_slug=tenant.slug if tenant else None,
+    )
+
+
+@router.get(
+    "/workspace-settings",
+    response_model=WorkspaceSettingsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Fetch tenant RBAC visibility mode and email sync privacy domains",
+)
+async def get_workspace_settings(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == current_user.tenant_id))
+    cfg = dict(tenant.settings or {}) if tenant else {}
+    return WorkspaceSettingsResponse(
+        tenant_id=current_user.tenant_id,
+        record_visibility_mode=str(cfg.get("record_visibility_mode", "all")),
+        enforce_owner_write_guard=bool(cfg.get("enforce_owner_write_guard", False)),
+        internal_domains=list(cfg.get("internal_domains", [])),
+    )
+
+
+@router.patch(
+    "/workspace-settings",
+    response_model=WorkspaceSettingsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update workspace RBAC visibility scope and internal email sync privacy settings",
+)
+async def update_workspace_settings(
+    payload: WorkspaceSettingsUpdate,
+    current_user: AuthenticatedUser = Depends(require_roles(["admin"])),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == current_user.tenant_id))
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found.")
+
+    cfg = dict(tenant.settings or {})
+    if payload.record_visibility_mode is not None:
+        cfg["record_visibility_mode"] = payload.record_visibility_mode
+    if payload.enforce_owner_write_guard is not None:
+        cfg["enforce_owner_write_guard"] = payload.enforce_owner_write_guard
+    if payload.internal_domains is not None:
+        cfg["internal_domains"] = [d.strip().lower() for d in payload.internal_domains if d.strip()]
+
+    tenant.settings = cfg
+    await db.flush()
+    await db.refresh(tenant)
+
+    return WorkspaceSettingsResponse(
+        tenant_id=tenant.id,
+        record_visibility_mode=str(cfg.get("record_visibility_mode", "all")),
+        enforce_owner_write_guard=bool(cfg.get("enforce_owner_write_guard", False)),
+        internal_domains=list(cfg.get("internal_domains", [])),
     )

@@ -1,15 +1,26 @@
 """
-Pipeline Domain Service: Default Stage Bootstrapping, Forecasting & Stage Transitions.
+Pipeline Domain Service: Default Stage Bootstrapping, Forecasting, SCD Type 2 Stage History & Stage Transitions.
 """
 
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.entities import Deal, Interaction, OutboxEvent, Pipeline, PipelineStage
+from src.models.entities import (
+    Deal,
+    DealStageHistory,
+    Interaction,
+    OutboxEvent,
+    Pipeline,
+    PipelineStage,
+    Task,
+)
 from src.schemas.crm import AuthenticatedUser
+from src.services.audit_service import record_entity_audit, resolve_interaction_hierarchy
+from src.services.custom_fields_service import validate_entity_custom_fields
 
 DEFAULT_STAGES_SPEC: list[tuple[str, int, Decimal, bool, bool]] = [
     ("Prospección", 1, Decimal("0.10"), False, False),
@@ -88,23 +99,107 @@ async def apply_deal_stage_transition(
     actor_user_id: uuid.UUID,
     actor_name: str,
     loss_reason: str | None = None,
+    loss_category: str | None = None,
+    competitor_name: str | None = None,
+    missing_feature_tag: str | None = None,
     notes: str | None = None,
 ) -> Deal:
     """
     Applies a validated stage transition on a Deal, syncing probability, forecast category,
-    activity timeline interaction, and transactional outbox event atomically.
+    SCD Type 2 stage history, hierarchical activity timeline interaction, system audit log,
+    and transactional outbox event atomically.
     """
+    now = datetime.now(UTC)
     previous_stage_id = deal.stage_id
 
+    # 0. Enforce lazy stage-gated custom field requirements for target_stage.position
+    await validate_entity_custom_fields(
+        session,
+        deal.tenant_id,
+        "deal",
+        None,
+        is_partial=True,
+        existing_metadata=deal.metadata_,
+        stage_position=target_stage.position,
+    )
+
+    # 1. Close active SCD Type 2 stage history row(s)
+    open_histories = list(
+        (
+            await session.scalars(
+                select(DealStageHistory).where(
+                    DealStageHistory.tenant_id == deal.tenant_id,
+                    DealStageHistory.deal_id == deal.id,
+                    DealStageHistory.exited_at.is_(None),
+                )
+            )
+        ).all()
+    )
+    for hist in open_histories:
+        hist.exited_at = now
+        entered_aware = (
+            hist.entered_at.replace(tzinfo=UTC) if hist.entered_at.tzinfo is None else hist.entered_at
+        )
+        hist.duration_seconds = max(0, int((now - entered_aware).total_seconds()))
+
+    # 2. Mutate Deal state
     deal.stage_id = target_stage.id
     deal.win_probability = target_stage.default_probability
     deal.is_won = target_stage.is_closed_won
     deal.is_lost = target_stage.is_closed_lost
     deal.loss_reason = loss_reason if target_stage.is_closed_lost else None
+    deal.loss_category = loss_category if target_stage.is_closed_lost else None
+    deal.competitor_name = competitor_name if target_stage.is_closed_lost else None
+    deal.missing_feature_tag = missing_feature_tag if target_stage.is_closed_lost else None
+    deal.stage_entered_at = now
+    deal.last_interaction_at = now
+    if target_stage.is_closed_won or target_stage.is_closed_lost:
+        deal.closed_at = now
+        # Auto-cancel pending follow-up tasks on closed deals to prevent zombie task accumulation
+        await session.execute(
+            update(Task)
+            .where(
+                Task.tenant_id == deal.tenant_id,
+                Task.deal_id == deal.id,
+                Task.status.in_(["pending", "in_progress"]),
+            )
+            .values(status="cancelled", updated_at=now)
+        )
+    else:
+        deal.closed_at = None
+
     deal.forecast_category = compute_forecast_category(
         win_probability=deal.win_probability,
         is_closed_won=target_stage.is_closed_won,
         is_closed_lost=target_stage.is_closed_lost,
+    )
+
+    # 3. Open new SCD Type 2 stage history entry
+    session.add(
+        DealStageHistory(
+            id=uuid.uuid4(),
+            tenant_id=deal.tenant_id,
+            deal_id=deal.id,
+            from_stage_id=previous_stage_id,
+            to_stage_id=target_stage.id,
+            amount_at_transition=deal.amount,
+            win_probability_at_transition=deal.win_probability,
+            expected_close_date_at_transition=deal.expected_close_date,
+            changed_by=actor_user_id,
+            entered_at=now,
+            exited_at=None,
+            duration_seconds=None,
+        )
+    )
+
+    # 4. Resolve hierarchical account roll-up for interaction
+    resolved_account_id, _, resolved_contact_id = await resolve_interaction_hierarchy(
+        session,
+        tenant_id=deal.tenant_id,
+        account_id=deal.account_id,
+        deal_id=deal.id,
+        contact_id=deal.contact_id,
+        occurred_at=now,
     )
 
     history_entry = Interaction(
@@ -112,8 +207,8 @@ async def apply_deal_stage_transition(
         tenant_id=deal.tenant_id,
         user_id=actor_user_id,
         deal_id=deal.id,
-        account_id=deal.account_id,
-        contact_id=deal.contact_id,
+        account_id=resolved_account_id,
+        contact_id=resolved_contact_id,
         type="stage_change",
         direction="internal",
         subject=f"Deal moved to '{target_stage.name}'",
@@ -121,8 +216,29 @@ async def apply_deal_stage_transition(
             notes
             or f"Stage updated by {actor_name}. Win probability synced to {int(deal.win_probability * 100)}%."
         ),
+        occurred_at=now,
     )
     session.add(history_entry)
+
+    # 5. Record System Audit Log
+    await record_entity_audit(
+        session,
+        tenant_id=deal.tenant_id,
+        entity_type="deal",
+        entity_id=deal.id,
+        action="STAGE_CHANGE",
+        actor_user_id=actor_user_id,
+        changes={
+            "stage_id": {"old": str(previous_stage_id), "new": str(target_stage.id)},
+            "stage_name": {"new": target_stage.name},
+            "win_probability": {"new": str(deal.win_probability)},
+            "loss_reason": {"new": deal.loss_reason},
+        },
+    )
+
+    # 6. Transactional Outbox Event with exact decimal string + integer cents
+    decimal_amount = Decimal(str(deal.amount)).quantize(Decimal("0.01"))
+    amount_cents = int((decimal_amount * Decimal("100")).to_integral_value())
 
     outbox_event = OutboxEvent(
         id=uuid.uuid4(),
@@ -134,7 +250,10 @@ async def apply_deal_stage_transition(
             "deal_id": str(deal.id),
             "previous_stage_id": str(previous_stage_id),
             "new_stage_id": str(target_stage.id),
-            "amount": float(deal.amount),
+            "amount": str(decimal_amount),
+            "amount_decimal": str(decimal_amount),
+            "amount_cents": amount_cents,
+            "currency": deal.currency,
             "is_won": deal.is_won,
             "is_lost": deal.is_lost,
             "updated_by": str(actor_user_id),
