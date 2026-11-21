@@ -11,6 +11,9 @@ updates:
     groups:
       backend-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/frontend"
@@ -23,16 +26,10 @@ updates:
       frontend-minor-patch:
         update-types: ["minor", "patch"]
     ignore:
-      # Tailwind 4 needs a dedicated migration (CSS-first config, new PostCSS plugin).
-      - dependency-name: "tailwindcss"
-        update-types: ["version-update:semver-major"]
-      # MSW 3 has breaking test server changes; @types/node must track the Node 22 runtime.
-      - dependency-name: "msw"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@types/node"
+      # Routine major upgrades require manual verification/migration; minor/patch and security updates remain active.
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  # Base image majors must move together with the CI Python/Node versions.
   - package-ecosystem: "docker"
     directory: "/backend"
     schedule:
@@ -62,3 +59,6 @@ updates:
     groups:
       actions:
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
