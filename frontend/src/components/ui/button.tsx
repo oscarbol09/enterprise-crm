@@ -15,7 +15,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "primary", size = "md", isLoading = false, children, disabled, ...props }, ref) => {
     const baseStyles =
-      "inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none min-h-[44px] min-w-[44px]";
+      "inline-flex items-center justify-center font-medium transition-all duration-150 ease-out active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none";
 
     const variants = {
       primary: "bg-primary text-primary-foreground hover:bg-primary-hover shadow-subtle",
@@ -26,10 +26,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const sizes = {
-      sm: "h-9 px-3 text-xs rounded-md",
-      md: "h-11 px-4 text-sm rounded-md",
-      lg: "h-12 px-6 text-base rounded-md",
-      icon: "h-11 w-11 rounded-md p-0",
+      sm: "h-8 px-2.5 text-xs rounded-md",
+      md: "h-9 px-3.5 text-sm rounded-md",
+      lg: "h-10 px-5 text-sm rounded-md",
+      icon: "h-8 w-8 rounded-md p-0",
     };
 
     return (
@@ -42,7 +42,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {isLoading ? (
           <span className="flex items-center gap-2">
             <svg
-              className="animate-spin h-4 w-4"
+              className="animate-spin h-3.5 w-3.5"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -55,7 +55,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               ></path>
             </svg>
-            <span>Cargando...</span>
+            <span>Procesando...</span>
           </span>
         ) : (
           children

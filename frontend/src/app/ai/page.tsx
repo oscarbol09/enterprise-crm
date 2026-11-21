@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
-  Sparkles,
   XCircle,
 } from "lucide-react";
 import {
@@ -198,13 +197,12 @@ function AICopilotWorkspaceContent() {
     <div className="flex flex-col gap-6 p-6 max-w-6xl w-full mx-auto">
       <div className="flex items-center justify-between pb-4 border-b border-border">
         <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            Copilot Agéntico &amp; Gobernanza Human-in-the-Loop
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
+            Revisión de Notas y Aprobaciones
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Analiza transcripciones con protección XML/HTML, revisa propuestas antes de mutar el
-            CRM y busca semánticamente con pgvector.
+            Extrae compromisos desde llamadas o reuniones, busca en el historial comercial y aprueba
+            cambios antes de aplicarlos.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadWorkspace} isLoading={isLoading} className="gap-1.5">
@@ -225,9 +223,9 @@ function AICopilotWorkspaceContent() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Interaction Summarizer */}
-        <section className="p-5 bg-card border border-border rounded-xl shadow-card flex flex-col gap-4">
+        <section className="p-5 bg-card border border-border rounded-lg shadow-card flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-foreground">
-            1. Resumir Interacción y Proponer Acciones
+            1. Extraer compromisos de una minuta
           </h2>
 
           <form onSubmit={handleSummarize} className="flex flex-col gap-3">
@@ -348,9 +346,9 @@ function AICopilotWorkspaceContent() {
         </section>
 
         {/* Semantic Vector Search */}
-        <section className="p-5 bg-card border border-border rounded-xl shadow-card flex flex-col gap-4">
+        <section className="p-5 bg-card border border-border rounded-lg shadow-card flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-foreground">
-            2. Búsqueda Semántica (pgvector HNSW)
+            2. Buscar en notas y perfiles
           </h2>
 
           <form onSubmit={handleSemanticSearch} className="flex gap-2">
@@ -405,21 +403,21 @@ function AICopilotWorkspaceContent() {
       </div>
 
       {/* HITL Proposals Queue */}
-      <section className="p-5 bg-card border border-border rounded-xl shadow-card flex flex-col gap-4">
+      <section className="p-5 bg-card border border-border rounded-lg shadow-card flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">
-            3. Cola de Aprobación Human-in-the-Loop ({proposals.length})
+            3. Cambios pendientes de aprobación ({proposals.length})
           </h2>
           {!canReviewProposals && (
             <span className="text-[11px] text-muted-foreground">
-              Solo admin o sales_manager pueden aprobar/rechazar propuestas.
+              Solo admin o sales_manager pueden aprobar o rechazar cambios propuestos.
             </span>
           )}
         </div>
 
         {proposals.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            No existen propuestas generadas por agentes en este workspace todavía.
+            No hay cambios pendientes de revisión en este espacio de trabajo.
           </p>
         ) : (
           <div className="flex flex-col gap-2.5">
@@ -501,7 +499,7 @@ function AICopilotWorkspaceContent() {
           <form
             onSubmit={handleRejectSubmit}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md p-6 bg-card border border-border rounded-xl shadow-elevated flex flex-col gap-4"
+            className="w-full max-w-md p-6 bg-card border border-border rounded-lg shadow-elevated flex flex-col gap-4"
           >
             <h3 className="text-base font-semibold text-foreground">Rechazar Propuesta</h3>
             <textarea

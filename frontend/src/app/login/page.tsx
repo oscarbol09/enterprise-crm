@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Building2, Lock, Mail, Sparkles, User } from "lucide-react";
+import { AlertCircle, Building2, Lock, Mail, User } from "lucide-react";
 import { ApiError } from "../../lib/api-client";
 import { useAuth } from "../../lib/auth-context";
 import { Button } from "../../components/ui/button";
@@ -69,15 +69,15 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-background">
-      <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-elevated p-6 flex flex-col gap-5">
+      <div className="w-full max-w-md bg-card border border-border rounded-lg shadow-elevated p-6 flex flex-col gap-5">
         <div className="flex items-center gap-3 pb-4 border-b border-border">
-          <div className="h-10 w-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shadow-subtle">
+          <div className="h-9 w-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-mono font-semibold text-xs tracking-wider shadow-subtle">
             CRM
           </div>
           <div>
-            <h1 className="text-base font-bold text-foreground">Enterprise CRM</h1>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Sparkles className="h-3 w-3 text-primary" /> Aislamiento RLS · BYOK · Copilot IA
+            <h1 className="text-base font-bold tracking-tight text-foreground">Enterprise CRM</h1>
+            <p className="text-xs text-muted-foreground">
+              Pipeline comercial, cuentas y seguimiento B2B
             </p>
           </div>
         </div>

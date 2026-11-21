@@ -10,7 +10,6 @@ import {
   KeyRound,
   Plus,
   ShieldCheck,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { LLMCredential } from "../../../types/crm";
@@ -144,16 +143,13 @@ export function LLMCredentialsManager({ authToken, userRole }: LLMCredentialsMan
   return (
     <div className="flex flex-col gap-6 max-w-3xl w-full">
       <div className="flex flex-col gap-1 pb-4 border-b border-border">
-        <div className="flex items-center gap-2">
-          <KeyRound className="h-5 w-5 text-primary" aria-hidden="true" />
-          <h1 className="text-lg font-semibold text-foreground">
-            Configuración de IA Agéntica — BYOK (Bring Your Own Key)
-          </h1>
-        </div>
+        <h1 className="text-lg font-semibold tracking-tight text-foreground">
+          Claves API de Modelos (BYOK)
+        </h1>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Configure las credenciales de IA propias de su organización. Todas las claves se cifran en
-          reposo mediante <strong className="text-foreground">AES-256-GCM</strong> con AAD por
-          tenant y nunca se devuelven en texto plano.
+          Registra las claves API propias de tu organización. Todas las claves se cifran en reposo
+          con <strong className="text-foreground">AES-256-GCM</strong> y nunca se muestran en texto
+          plano después de guardarse.
         </p>
       </div>
 
@@ -164,8 +160,8 @@ export function LLMCredentialsManager({ authToken, userRole }: LLMCredentialsMan
         >
           <AlertCircle className="h-4 w-4 text-warning shrink-0" aria-hidden="true" />
           <span>
-            Tu rol actual (<strong>{userRole}</strong>) es de solo consulta operativa. Solo un
-            usuario con rol <strong>admin</strong> puede gestionar la bóveda BYOK.
+            Tu rol actual (<strong>{userRole}</strong>) es de solo consulta. Solo un administrador
+            puede gestionar las claves API del espacio de trabajo.
           </span>
         </div>
       )}
@@ -175,7 +171,7 @@ export function LLMCredentialsManager({ authToken, userRole }: LLMCredentialsMan
           role="alert"
           className={`flex items-center justify-between p-3 rounded-md text-xs border ${
             feedback.type === "success"
-              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
+              ? "bg-success/10 text-success border-success/25"
               : "bg-destructive/10 text-destructive border-destructive/20"
           }`}
         >
@@ -200,7 +196,7 @@ export function LLMCredentialsManager({ authToken, userRole }: LLMCredentialsMan
       {!isNonAdmin && (
         <form
           onSubmit={handleSaveCredential}
-          className="flex flex-col gap-4 p-5 bg-card border border-border rounded-xl shadow-card"
+          className="flex flex-col gap-4 p-5 bg-card border border-border rounded-lg shadow-card"
           aria-label="Registrar nueva API key"
         >
           <div className="flex items-center gap-2">
@@ -284,15 +280,15 @@ export function LLMCredentialsManager({ authToken, userRole }: LLMCredentialsMan
         <h2 className="text-sm font-semibold text-foreground">Credenciales del Tenant</h2>
 
         {isLoading ? (
-          <div className="p-6 border border-border rounded-xl bg-card text-center text-xs text-muted-foreground animate-pulse">
-            Consultando bóveda de credenciales del tenant...
+          <div className="p-6 border border-border rounded-lg bg-card text-center text-xs text-muted-foreground animate-pulse">
+            Cargando claves configuradas...
           </div>
         ) : credentials.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 border border-dashed border-border rounded-xl bg-card text-center gap-2">
+          <div className="flex flex-col items-center justify-center p-8 border border-dashed border-border rounded-lg bg-card text-center gap-2">
             <Cpu className="h-8 w-8 text-muted-foreground/60" aria-hidden="true" />
             <h3 className="text-sm font-medium text-foreground">No hay API keys personalizadas</h3>
             <p className="text-xs text-muted-foreground max-w-sm">
-              Su organización utiliza actualmente las credenciales del sistema central si están
+              Tu organización utiliza actualmente las credenciales del sistema central si están
               configuradas.
             </p>
           </div>
@@ -304,8 +300,8 @@ export function LLMCredentialsManager({ authToken, userRole }: LLMCredentialsMan
                 className="flex flex-wrap items-center justify-between gap-3 p-4 bg-card border border-border rounded-lg shadow-subtle hover:bg-muted/20 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                    <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center text-primary">
+                    <KeyRound className="h-4 w-4" aria-hidden="true" />
                   </div>
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">

@@ -63,13 +63,13 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["var(--font-geist-sans)", "Inter", "system-ui", "sans-serif"],
-        mono: ["var(--font-geist-mono)", "monospace"],
+        sans: ["var(--font-plex-sans)", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["var(--font-plex-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       boxShadow: {
-        subtle: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
-        card: "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1)",
-        elevated: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)",
+        subtle: "0 1px 2px 0 rgba(24, 23, 21, 0.04)",
+        card: "0 1px 2px 0 rgba(24, 23, 21, 0.06), 0 1px 3px 0 rgba(24, 23, 21, 0.04)",
+        elevated: "0 8px 24px -4px rgba(24, 23, 21, 0.12), 0 2px 6px -2px rgba(24, 23, 21, 0.06)",
       },
     },
   },

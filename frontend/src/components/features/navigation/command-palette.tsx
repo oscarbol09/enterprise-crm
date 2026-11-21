@@ -3,19 +3,30 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
+  BarChart3,
+  Building2,
+  CheckSquare,
+  ClipboardCheck,
   Command,
   DollarSign,
   KeyRound,
   Search,
-  Sparkles,
   TrendingUp,
   UserPlus,
   Users,
 } from "lucide-react";
 
+import { Contact, Deal } from "../../../types/crm";
+import { fetchContacts, fetchDeals } from "../../../lib/api-client";
+
 interface CommandItem {
   id: string;
-  category: "Acciones Rápidas" | "Navegación" | "Inteligencia Artificial";
+  category:
+    | "Acciones Rápidas"
+    | "Navegación"
+    | "Automatización"
+    | "Contactos"
+    | "Oportunidades";
   title: string;
   subtitle?: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -25,13 +36,22 @@ interface CommandItem {
 
 interface CommandPaletteProps {
   isOpen?: boolean;
+  authToken?: string;
   onClose?: () => void;
   onToggle?: () => void;
   onNavigate?: (path: string) => void;
 }
 
+function isEditableElement(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName.toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return true;
+  return target.isContentEditable;
+}
+
 export function CommandPalette({
   isOpen: controlledIsOpen,
+  authToken,
   onClose: controlledOnClose,
   onToggle: controlledOnToggle,
   onNavigate,
@@ -39,6 +59,8 @@ export function CommandPalette({
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [liveContacts, setLiveContacts] = useState<Contact[]>([]);
+  const [liveDeals, setLiveDeals] = useState<Deal[]>([]);
 
   const isControlled = controlledIsOpen !== undefined;
   const isOpen = isControlled ? controlledIsOpen : internalIsOpen;
@@ -67,15 +89,39 @@ export function CommandPalette({
         } else {
           setInternalIsOpen((prev) => !prev);
         }
-      } else if (e.key === "Escape" && isOpen) {
+        return;
+      }
+
+      if (e.key === "Escape" && isOpen) {
         e.preventDefault();
         handleClose();
+        return;
+      }
+
+      // Single-key global shortcuts when not typing in an input/textarea and palette is closed
+      if (!isOpen && !e.metaKey && !e.ctrlKey && !e.altKey && !isEditableElement(e.target)) {
+        const key = e.key.toLowerCase();
+        if (key === "c") {
+          e.preventDefault();
+          onNavigate?.("/contacts?new=1");
+        } else if (key === "d") {
+          e.preventDefault();
+          onNavigate?.("/deals?new=1");
+        } else if (key === "/") {
+          const searchInput = document.querySelector<HTMLInputElement>(
+            'input[type="search"], input[aria-label*="Buscar"]'
+          );
+          if (searchInput) {
+            e.preventDefault();
+            searchInput.focus();
+          }
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, isControlled, controlledOnClose, controlledOnToggle, handleClose]);
+  }, [isOpen, isControlled, controlledOnClose, controlledOnToggle, handleClose, onNavigate]);
 
   useEffect(() => {
     if (isOpen) {
@@ -112,31 +158,20 @@ export function CommandPalette({
       },
       {
         id: "ai-summarize",
-        category: "Inteligencia Artificial",
-        title: "Copilot IA & Propuestas HITL",
-        subtitle: "Resumir interacciones, aprobar propuestas y búsqueda semántica",
-        icon: Sparkles,
+        category: "Automatización",
+        title: "Revisión de Notas y Aprobaciones",
+        subtitle: "Extraer compromisos, aprobar cambios pendientes y buscar en el historial",
+        icon: ClipboardCheck,
         onSelect: () => {
           onNavigate?.("/ai");
           handleClose();
         },
       },
       {
-        id: "nav-contacts",
-        category: "Navegación",
-        title: "Ir a Directorio de Contactos",
-        subtitle: "Lista consolidada de clientes y leads",
-        icon: Users,
-        onSelect: () => {
-          onNavigate?.("/contacts");
-          handleClose();
-        },
-      },
-      {
         id: "nav-pipeline",
         category: "Navegación",
-        title: "Ir a Tablero de Ventas (Pipeline)",
-        subtitle: "Vista Kanban de etapas y forecasting",
+        title: "Ir a Pipeline de Ventas",
+        subtitle: "Vista Kanban y tabla operativa con forecast multidivisa",
         icon: TrendingUp,
         onSelect: () => {
           onNavigate?.("/deals");
@@ -144,10 +179,54 @@ export function CommandPalette({
         },
       },
       {
+        id: "nav-contacts",
+        category: "Navegación",
+        title: "Ir a Contactos",
+        subtitle: "Edición inline, fusión de duplicados e historial",
+        icon: Users,
+        onSelect: () => {
+          onNavigate?.("/contacts");
+          handleClose();
+        },
+      },
+      {
+        id: "nav-accounts",
+        category: "Navegación",
+        title: "Ir a Empresas",
+        subtitle: "Directorio de cuentas B2B y actividad consolidada",
+        icon: Building2,
+        onSelect: () => {
+          onNavigate?.("/accounts");
+          handleClose();
+        },
+      },
+      {
+        id: "nav-tasks",
+        category: "Navegación",
+        title: "Ir a Tareas y Seguimientos",
+        subtitle: "Compromisos comerciales y limpieza de tareas vencidas",
+        icon: CheckSquare,
+        onSelect: () => {
+          onNavigate?.("/tasks");
+          handleClose();
+        },
+      },
+      {
+        id: "nav-reports",
+        category: "Navegación",
+        title: "Ir a Reportes y Forecast Financiero",
+        subtitle: "Forecast USD, velocidad comercial, embudo y atribución por canal",
+        icon: BarChart3,
+        onSelect: () => {
+          onNavigate?.("/reports");
+          handleClose();
+        },
+      },
+      {
         id: "nav-byok",
         category: "Navegación",
-        title: "Configuración BYOK (Credenciales LLM)",
-        subtitle: "Gestión cifrada AES-256-GCM de API keys del tenant",
+        title: "Claves API de Modelos",
+        subtitle: "Administrar credenciales de proveedores externos",
         icon: KeyRound,
         onSelect: () => {
           onNavigate?.("/settings/llm-credentials");
@@ -158,16 +237,68 @@ export function CommandPalette({
     [onNavigate, handleClose]
   );
 
+  useEffect(() => {
+    if (!isOpen || !authToken || query.trim().length < 2) {
+      return;
+    }
+    let active = true;
+    const trimmed = query.trim();
+    const timer = setTimeout(() => {
+      void Promise.all([
+        fetchContacts(authToken, { q: trimmed }).catch(() => []),
+        fetchDeals(authToken, trimmed).catch(() => []),
+      ]).then(([foundContacts, foundDeals]) => {
+        if (!active) return;
+        setLiveContacts(foundContacts.slice(0, 4));
+        setLiveDeals(foundDeals.slice(0, 4));
+      });
+    }, 180);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [isOpen, authToken, query]);
+
   const filteredCommands = useMemo(() => {
-    if (!query.trim()) return commands;
-    const lower = query.toLowerCase();
-    return commands.filter(
+    const trimmed = query.trim();
+    if (!trimmed) return commands;
+    const lower = trimmed.toLowerCase();
+    const staticMatches = commands.filter(
       (cmd) =>
         cmd.title.toLowerCase().includes(lower) ||
         cmd.subtitle?.toLowerCase().includes(lower) ||
         cmd.category.toLowerCase().includes(lower)
     );
-  }, [commands, query]);
+
+    if (trimmed.length < 2) return staticMatches;
+
+    const contactMatches: CommandItem[] = liveContacts.map((c) => ({
+      id: `contact-${c.id}`,
+      category: "Contactos",
+      title: `${c.first_name} ${c.last_name}`,
+      subtitle: `${c.email}${c.job_title ? ` · ${c.job_title}` : ""}`,
+      icon: Users,
+      onSelect: () => {
+        onNavigate?.(`/contacts?q=${encodeURIComponent(c.email)}`);
+        handleClose();
+      },
+    }));
+
+    const dealMatches: CommandItem[] = liveDeals.map((d) => ({
+      id: `deal-${d.id}`,
+      category: "Oportunidades",
+      title: d.title,
+      subtitle: `$${Number(d.normalized_amount_usd ?? d.amount).toLocaleString("en-US")} USD · ${d.forecast_category}`,
+      icon: DollarSign,
+      onSelect: () => {
+        onNavigate?.("/deals");
+        handleClose();
+      },
+    }));
+
+    return [...dealMatches, ...contactMatches, ...staticMatches];
+  }, [commands, query, liveContacts, liveDeals, onNavigate, handleClose]);
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
@@ -197,7 +328,7 @@ export function CommandPalette({
       onClick={handleClose}
     >
       <div
-        className="w-full max-w-xl bg-card border border-border rounded-xl shadow-elevated overflow-hidden flex flex-col focus:outline-none"
+        className="w-full max-w-xl bg-card border border-border rounded-lg shadow-elevated overflow-hidden flex flex-col focus:outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
@@ -210,7 +341,7 @@ export function CommandPalette({
             aria-autocomplete="list"
             aria-controls="command-palette-results"
             className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none border-none p-0 focus:ring-0"
-            placeholder="Buscar acciones o navegar (ej. Nuevo contacto, Copilot IA, Pipeline)..."
+            placeholder="Buscar acciones o navegar (ej. Nuevo contacto, Empresas, Tareas, Pipeline)..."
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -295,12 +426,13 @@ export function CommandPalette({
 
         <div className="px-4 py-2 border-t border-border bg-muted/30 flex items-center justify-between text-[11px] text-muted-foreground">
           <div className="flex items-center gap-3">
-            <span>↑↓ para navegar</span>
-            <span>↵ para seleccionar</span>
+            <span>↑↓ navegar</span>
+            <span>↵ ejecutar</span>
+            <span>C contacto · D deal · / buscar</span>
           </div>
           <div className="flex items-center gap-1 font-mono">
             <Command className="h-3 w-3" />
-            <span>K para abrir / cerrar</span>
+            <span>K</span>
           </div>
         </div>
       </div>

@@ -72,7 +72,7 @@ describe("AppShell", () => {
         <div>Protected</div>
       </AppShell>
     );
-    expect(screen.getByText(/Verificando sesión segura/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cargando espacio de trabajo/i)).toBeInTheDocument();
   });
 
   it("redirects unauthenticated users to /login outside auth route", () => {

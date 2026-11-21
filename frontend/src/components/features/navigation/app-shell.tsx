@@ -4,12 +4,16 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BarChart3,
   Building2,
+  CheckSquare,
+  ClipboardCheck,
   Command,
   KeyRound,
   LogOut,
   Menu,
-  Sparkles,
+  Moon,
+  Sun,
   TrendingUp,
   Users,
   X,
@@ -20,11 +24,18 @@ import { CommandPalette } from "./command-palette";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isLoading, logout } = useAuth();
+  const { user, accessToken, isLoading, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isDarkTheme, setIsDarkTheme] = useState(false);
 
   const isAuthPage = pathname === "/login";
+
+  const handleToggleTheme = () => {
+    const nextDark = !isDarkTheme;
+    setIsDarkTheme(nextDark);
+    document.documentElement.classList.toggle("dark", nextDark);
+  };
 
   useEffect(() => {
     if (isLoading) return;
@@ -42,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background text-xs text-muted-foreground">
-        Verificando sesión segura del tenant...
+        Cargando espacio de trabajo...
       </div>
     );
   }
@@ -52,10 +63,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const navLinks = [
-    { name: "Pipeline (Deals)", href: "/deals", icon: TrendingUp },
+    { name: "Pipeline", href: "/deals", icon: TrendingUp },
+    { name: "Reportes", href: "/reports", icon: BarChart3 },
     { name: "Contactos", href: "/contacts", icon: Users },
-    { name: "Copilot IA & HITL", href: "/ai", icon: Sparkles },
-    { name: "Configuración BYOK", href: "/settings/llm-credentials", icon: KeyRound },
+    { name: "Empresas", href: "/accounts", icon: Building2 },
+    { name: "Tareas", href: "/tasks", icon: CheckSquare },
+    { name: "Revisión IA", href: "/ai", icon: ClipboardCheck },
+    { name: "Claves API", href: "/settings/llm-credentials", icon: KeyRound },
   ];
 
   const handleNavigate = (path: string) => {
@@ -73,6 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="h-screen w-full bg-background text-foreground antialiased flex flex-col md:flex-row overflow-hidden">
       <CommandPalette
         isOpen={isCommandPaletteOpen}
+        authToken={accessToken ?? undefined}
         onClose={() => setIsCommandPaletteOpen(false)}
         onToggle={() => setIsCommandPaletteOpen((prev) => !prev)}
         onNavigate={handleNavigate}
@@ -128,9 +143,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               CRM
             </div>
             <div className="flex flex-col">
-              <span className="font-semibold text-sm leading-tight">Enterprise CRM</span>
-              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                <Sparkles className="h-2.5 w-2.5 text-primary" /> IA Agéntica &amp; RLS
+              <span className="font-semibold text-sm tracking-tight leading-tight">Enterprise CRM</span>
+              <span className="text-[11px] text-muted-foreground">
+                Operaciones Comerciales
               </span>
             </div>
           </Link>
@@ -184,15 +199,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            title="Cerrar sesión"
-            aria-label="Cerrar sesión"
-            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={handleToggleTheme}
+              title={isDarkTheme ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+              aria-label={isDarkTheme ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              {isDarkTheme ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </aside>
 
