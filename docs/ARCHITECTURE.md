@@ -22,7 +22,7 @@ flowchart LR
 2. **Transaction-Local GUC Binding**:
    `set_tenant_rls_context` executes `SELECT set_config('app.current_tenant_id', :tenant_id, true)` parameterized via `asyncpg`. Using `is_local = true` scopes the binding strictly to the active transaction and prevents tenant bleed across pooled SQLAlchemy connections.
 3. **Database Policy Enforcement**:
-   All 14 tenant-owned tables (`users`, `refresh_tokens`, `accounts`, `contacts`, `pipelines`, `pipeline_stages`, `deals`, `interactions`, `tasks`, `lead_embeddings`, `outbox_events`, `ai_proposals`, `ai_audit_logs`, `tenant_llm_credentials`) enable `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` with dual predicates:
+   All 20 tenant-owned tables (`users`, `refresh_tokens`, `accounts`, `contacts`, `company_affiliations`, `pipelines`, `pipeline_stages`, `deals`, `deal_participants`, `deal_stage_history`, `custom_field_definitions`, `interactions`, `synced_email_messages`, `entity_audit_logs`, `tasks`, `lead_embeddings`, `outbox_events`, `ai_proposals`, `ai_audit_logs`, `tenant_llm_credentials`) enable `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` with dual predicates:
    ```sql
    USING (tenant_id = get_current_tenant_id())
    WITH CHECK (tenant_id = get_current_tenant_id())

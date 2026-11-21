@@ -8,7 +8,7 @@ Most multi-tenant SaaS backends enforce isolation solely through application-lev
 
 This repository demonstrates an isolated reference architecture combining:
 
-- **Database-enforced multi-tenancy**: PostgreSQL `ENABLE` + `FORCE ROW LEVEL SECURITY` on all 14 tenant-scoped tables under a least-privilege `crm_app` (`NOBYPASSRLS`) role, bound per transaction via `SELECT set_config('app.current_tenant_id', :tenant_id, true)`.
+- **Database-enforced multi-tenancy**: PostgreSQL `ENABLE` + `FORCE ROW LEVEL SECURITY` on all 22 tenant-scoped tables under a least-privilege `crm_app` (`NOBYPASSRLS`) role, bound per transaction via `SELECT set_config('app.current_tenant_id', :tenant_id, true)`.
 - **Tenant-scoped BYOK cryptographic vault**: Customer LLM API keys (Gemini, Claude, OpenAI) encrypted with AES-256-GCM bound to the tenant UUID as Associated Authenticated Data (`AAD`).
 - **Zero-I/O segmented AI Copilot with Human-in-the-Loop (HITL)**: Database reads close before outbound HTTP requests to LLM providers; write actions proposed by the AI are stored as `pending_review` proposals and only mutate CRM tables (`tasks`, `deals`) upon explicit approval.
 
@@ -16,11 +16,11 @@ This repository demonstrates an isolated reference architecture combining:
 
 | Layer | Technology | Key Responsibilities |
 | :--- | :--- | :--- |
-| API & Domain | FastAPI, Python 3.12, SQLAlchemy 2 Async, Pydantic v2 | Auth + refresh rotation, RBAC (`admin`, `sales_manager`, `sales_rep`, `readonly`), contacts/deals/accounts/tasks CRUD, HITL engine, MCP tool endpoints |
-| Persistence | PostgreSQL 16 + `pgvector` + Alembic | Shared tables with `FORCE ROW LEVEL SECURITY`, HNSW cosine index (`vector(768)`), `SECURITY DEFINER` pre-auth lookup functions, transactional `outbox_events` (`SKIP LOCKED`) |
+| API & Domain | FastAPI, Python 3.12, SQLAlchemy 2 Async, Pydantic v2 | Auth + refresh rotation, hierarchical RBAC (`admin`, `sales_manager`, `sales_rep`, `readonly`), multi-entity B2B graph (`accounts`, `contacts`, `deals`, `company_affiliations`, `deal_participants`), dynamic custom fields (`min_stage_position` + `X-Stage-Gate-Fields`), multi-currency FX locking, bundled CSV import + atomic batch rollback, pipeline snapshots & waterfall bridge, Win/Loss analytics, RFC 5322 email sync, HITL queue, MCP endpoints |
+| Persistence | PostgreSQL 16 + `pgvector` + Alembic | 22 tenant-scoped tables with `FORCE ROW LEVEL SECURITY`, SCD Type 2 `deal_stage_history`, `pipeline_snapshots`, `import_batches`, `entity_audit_logs`, HNSW cosine index (`vector(768)`), `SECURITY DEFINER` pre-auth lookup helpers, transactional `outbox_events` (`SKIP LOCKED`) |
 | Caching & Rate Limits | Redis 7 | Sliding-window rate limiting on auth and AI endpoints with in-memory fallback |
-| Web Client | Next.js 16.4 (App Router), React 19, Tailwind CSS | In-memory access token with single silent refresh retry (`httpOnly` cookie), optimistic Kanban pipeline with rollback & mandatory loss reason, Command Palette (`Ctrl/Cmd+K`), AI Copilot & HITL queue, BYOK manager |
-| Verification & CI | Pytest + Hypothesis + Vitest + MSW + Trivy + Gitleaks | 89.5% backend branch coverage locally (SQLite + FakeRedis), live Postgres Forced RLS integration tests in CI, 81.2% frontend statement coverage |
+| Web Client | Next.js 16.4 (App Router), React 19, Tailwind CSS, IBM Plex | In-memory access token with single silent refresh retry (`httpOnly` cookie), Kanban (HTML5 DnD + inline 1-field Stage-Gate popover + structured Closed-Lost taxonomy) + High-Density Data Grid (`DealDataGrid` with `j`/`k`/`Space` keyboard row navigation, inline editing & USD FX normalization), Slide-over `DealPeekDrawer` with Omnibox slash commands & Rep Playbooks, Executive `/reports` dashboard (Forecast, Waterfall Bridge, Win/Loss Matrix, Risk Radar with Ghosting detection, Attribution), Dry-Run Bundled CSV Importer with 1-click Batch Rollback & Safe CSV Exports, Command Palette (`Ctrl/Cmd+K` live search + `C`/`D`/`/`), `/accounts`, `/tasks`, `/ai`, `/settings/llm-credentials`, Stone & Pine light/dark palette |
+| Verification & CI | Pytest + Hypothesis + Vitest + MSW + Trivy + Gitleaks | 89%+ backend coverage locally (48 tests, SQLite + FakeRedis), live Postgres Forced RLS integration test in CI, 82%+ frontend statement / 84%+ line coverage (34 tests) |
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for sequence diagrams, database policies, and failure boundaries.
 
@@ -116,25 +116,25 @@ npm run build
 .
 ├── .github/workflows/ci.yml   # Gitleaks, Ruff/Mypy/Bandit/pip-audit/Pytest+Postgres RLS, Next/Vitest, Docker + Trivy
 ├── backend/
-│   ├── alembic/               # Schema migrations (0001_initial_crm_schema.py)
+│   ├── alembic/               # Schema migrations (0001_initial_crm_schema.py, 0002_b2b_graph_fx_and_analytics.py)
 │   ├── src/
-│   │   ├── api/v1/            # auth, contacts, deals, accounts, ai_copilot, llm_credentials, mcp
+│   │   ├── api/v1/            # auth, contacts, deals, accounts, communications, custom_fields, analytics, data_transfer, ai_copilot, llm_credentials, mcp
 │   │   ├── core/              # config, database (RLS), security (AES-GCM/bcrypt/JWT), logging, rate_limit
 │   │   ├── models/            # Portable SQLAlchemy 2 models (PostgreSQL + SQLite test variants)
 │   │   ├── schemas/           # Strict Pydantic v2 contracts
-│   │   └── services/          # ai_service, auth_service, embedding_service, outbox_service, pipeline_service, mcp_crm_server
-│   ├── tests/                 # Unit, property-based (Hypothesis), API, and Postgres RLS integration tests
+│   │   └── services/          # ai_service, analytics_service, audit_service, auth_service, currency_service, custom_fields_service, data_transfer_service, email_sync_service, embedding_service, outbox_service, pipeline_service, rbac_service, mcp_crm_server
+│   ├── tests/                 # Unit, property-based (Hypothesis), API, analytics/migration, and Postgres RLS integration tests
 │   ├── Dockerfile
 │   └── pyproject.toml
 ├── database/
-│   └── schema.sql             # Canonical DDL reference with pgvector HNSW, FORCE RLS, and crm_app grants
+│   └── schema.sql             # Canonical 22-table tenant-scoped DDL reference with pgvector HNSW, FORCE RLS, and crm_app grants
 ├── docs/
 │   └── ARCHITECTURE.md
 ├── frontend/
 │   ├── src/
-│   │   ├── __tests__/         # Vitest + Testing Library + MSW integration suite
-│   │   ├── app/               # App Router pages (/login, /deals, /contacts, /ai, /settings/llm-credentials)
-│   │   ├── components/        # AppShell, CommandPalette, DealKanbanBoard, ContactForm, LLMCredentialsManager
+│   │   ├── __tests__/         # Vitest + Testing Library + MSW integration, reports & design-system test suite
+│   │   ├── app/               # App Router pages (/login, /deals, /reports, /contacts, /accounts, /tasks, /ai, /settings/llm-credentials)
+│   │   ├── components/        # AppShell, CommandPalette, DealKanbanBoard, DealDataGrid, DealPeekDrawer, RevenueReportsDashboard, CsvImportModal, ContactForm, LLMCredentialsManager
 │   │   └── lib/               # Typed API client with Decimal normalization & silent refresh retry
 │   ├── Dockerfile
 │   └── package.json
@@ -148,6 +148,7 @@ npm run build
 - **Outbox Worker Execution**: Domain events are recorded atomically in `outbox_events` and claimed via `SELECT ... FOR UPDATE SKIP LOCKED` in `outbox_service.py`, ready to be invoked by a scheduled worker or webhook dispatcher; no separate background scheduler daemon is spawned inside the web worker containers.
 - **Session Persistence on Page Reload**: Access tokens are kept strictly in JavaScript memory (mitigating XSS exfiltration of bearer tokens via `localStorage`), paired with an `httpOnly` refresh cookie (`Path=/api/v1/auth`). In cross-origin local development (`localhost:3000` -> `localhost:8000`) or browsers blocking third-party cookies in production, both origin hosts should share a parent site behind a reverse proxy or BFF.
 - **SQLite vs. PostgreSQL Parity in Local Runs**: When `TEST_POSTGRES_URL` is unset, `tests/test_postgres_rls_integration.py` is skipped cleanly because SQLite lacks PostgreSQL RLS and `pgvector` operators; full Forced RLS verification executes inside GitHub Actions against `pgvector/pgvector:pg16`.
+- **Static Reference FX Table**: `currency_service.py` ships with deterministic fallback USD conversion rates (`USD`, `EUR`, `GBP`, `MXN`, `COP`, `BRL`, `CAD`) when callers do not pass an explicit `exchange_rate_to_usd`. Closed deals lock their FX rate permanently (`409 Conflict` on mutation), but live daily treasury feed ingestion (e.g., ECB/OpenExchangeRates) must be wired in production deployments requiring automated spot updates.
 
 ## Contributing, Security & License
 
