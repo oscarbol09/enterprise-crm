@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
+    GEMINI_MODEL: str = "gemini/gemini-3.8-flash"
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+    OPENAI_MODEL: str = "gpt-4o"
     DEFAULT_LLM_PROVIDER: Literal["gemini", "claude", "openai"] = "gemini"
     ALLOW_OFFLINE_AI_STUB: bool | None = None
 

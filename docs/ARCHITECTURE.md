@@ -63,6 +63,8 @@ Holding a PostgreSQL transaction open across an external LLM HTTP call starves c
 2. **Phase 2 (Zero DB Locks Held)**: Strip prompt-injection delimiters (`xml_tags` case-insensitive + HTML escaping), call the configured LLM provider via `httpx` with strict Pydantic v2 JSON validation (`LLMAnalysisOutput`). If live inference fails, return structured error `502` rather than fabricating synthetic stub responses (`_call_provider_STUB` only runs in explicit non-production `ALLOW_OFFLINE_AI_STUB=true` testing/development modes when no live key exists).
 3. **Phase 3 (Short Write Session)**: Persist redacted `Interaction`, log telemetry + SHA-256 prompt digest in `ai_audit_logs`, and queue suggested mutations (`create_task`, `move_deal_stage`, etc.) as `pending_review` rows in `ai_proposals`.
 
+Provider model identifiers come from the `GEMINI_MODEL`, `ANTHROPIC_MODEL`, and `OPENAI_MODEL` environment settings. The response parser accepts either plain JSON or JSON inside a Markdown code fence, including when the provider adds conversational text around that fence; every payload still must pass `LLMAnalysisOutput` validation.
+
 ### Proposal Approval & Real Execution
 
 Approving a proposal via `POST /api/v1/ai/proposals/{proposal_id}/approve` inside `ai_copilot.py` transitions status atomically and executes side effects in PostgreSQL:
