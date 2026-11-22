@@ -20,6 +20,32 @@ from src.services.mcp_crm_server import MCPAgentExecutionEngine
 from tests.conftest import register_and_login
 
 
+def test_parse_llm_analysis_json_extracts_fenced_payload_from_conversational_response() -> None:
+    fence = "`" * 3
+    response = (
+        "Here is the analysis:\n"
+        f"{fence}json\n"
+        '{"executive_summary":"A useful summary","key_commitments_identified":["Send proposal"],'
+        '"detected_sentiment":"positive","suggested_next_step":"Send the proposal",'
+        '"action_proposals":[]}\n'
+        f"{fence}\n"
+        "Let me know if you need anything else."
+    )
+
+    parsed = parse_llm_analysis_json(response)
+
+    assert parsed.executive_summary == "A useful summary"
+    assert parsed.key_commitments_identified == ["Send proposal"]
+    assert parsed.detected_sentiment == "positive"
+
+
+def test_parse_llm_analysis_json_keeps_plain_json_compatibility() -> None:
+    parsed = parse_llm_analysis_json('{"executive_summary":"Plain JSON","suggested_next_step":"Continue"}')
+
+    assert parsed.executive_summary == "Plain JSON"
+    assert parsed.suggested_next_step == "Continue"
+
+
 async def test_health_correlation_id_and_security_headers(client: AsyncClient) -> None:
     resp = await client.get("/health", headers={"X-Correlation-ID": "corr-test-123"})
     assert resp.status_code == 200
@@ -138,6 +164,44 @@ async def test_ai_service_json_validation_stub_variants_and_corrupted_byok(
     )
     assert res["key_source"] == "global_env"
     assert res["provider"] == "openai"
+
+
+@pytest.mark.parametrize(
+    ("provider", "setting_name", "model_name"),
+    [
+        ("gemini", "GEMINI_MODEL", "gemini/custom-flash"),
+        ("claude", "ANTHROPIC_MODEL", "claude-custom-sonnet"),
+        ("openai", "OPENAI_MODEL", "gpt-custom"),
+    ],
+)
+async def test_litellm_uses_configured_provider_model(
+    provider: str,
+    setting_name: str,
+    model_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested_models: list[str] = []
+
+    async def mock_acompletion(**kwargs):
+        requested_models.append(kwargs["model"])
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content='{"ok": true}'))],
+            usage=types.SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+        )
+
+    monkeypatch.setattr(settings, setting_name, model_name)
+    monkeypatch.setattr(litellm, "acompletion", mock_acompletion)
+
+    result = await MultiModelRouter._call_litellm(
+        provider=provider,
+        api_key="fake-test-api-key",
+        system_prompt="system",
+        user_message="user",
+        temperature=0.1,
+    )
+
+    assert requested_models == [model_name]
+    assert result["model_name"] == model_name
 
 
 async def test_mcp_error_paths_and_timeline_and_memory_rate_limit_fallback(

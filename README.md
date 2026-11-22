@@ -24,6 +24,10 @@ This repository demonstrates an isolated reference architecture combining:
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for sequence diagrams, database policies, and failure boundaries.
 
+## LLM Model Selection
+
+The Copilot uses the model configured for the selected provider. Set GEMINI_MODEL, ANTHROPIC_MODEL, or OPENAI_MODEL in the backend environment to override the defaults shown in .env.example. These model settings apply to both tenant BYOK credentials and global provider keys.
+
 ## Quickstart (Docker Compose)
 
 1. Copy the environment template and adjust values if deploying beyond localhost:

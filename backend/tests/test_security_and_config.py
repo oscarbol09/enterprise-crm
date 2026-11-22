@@ -176,3 +176,27 @@ def test_settings_rejects_weak_secrets_in_production(monkeypatch: pytest.MonkeyP
     )
     assert prod_ok.allow_offline_stub is False
     assert prod_ok.cookie_secure is True
+
+
+def test_provider_models_use_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    model_settings = {
+        "GEMINI_MODEL": "gemini/gemini-3.8-flash",
+        "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",
+        "OPENAI_MODEL": "gpt-4o",
+    }
+    for name in model_settings:
+        monkeypatch.delenv(name, raising=False)
+
+    defaults = Settings(_env_file=None)
+    assert {name: getattr(defaults, name) for name in model_settings} == model_settings
+
+    overrides = {
+        "GEMINI_MODEL": "gemini/custom-flash",
+        "ANTHROPIC_MODEL": "claude-custom-sonnet",
+        "OPENAI_MODEL": "gpt-custom",
+    }
+    for name, value in overrides.items():
+        monkeypatch.setenv(name, value)
+
+    configured = Settings(_env_file=None)
+    assert {name: getattr(configured, name) for name in overrides} == overrides

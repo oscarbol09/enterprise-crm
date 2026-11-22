@@ -147,7 +147,11 @@ async def test_ai_copilot_blocks_stub_when_disabled_and_parses_fenced_json_when_
                 "action_proposals": [],
             }
         )
-        msg = types.SimpleNamespace(content=f"```json\n{payload}\n```")
+        msg = types.SimpleNamespace(
+            content=(
+                f"Here is the analysis.\n```json\n{payload}\n```\nLet me know if you need anything else."
+            )
+        )
         choice = types.SimpleNamespace(message=msg)
         usage = types.SimpleNamespace(prompt_tokens=120, completion_tokens=60)
         return types.SimpleNamespace(choices=[choice], usage=usage)

@@ -35,7 +35,7 @@ logger = structlog.get_logger(__name__)
 litellm.telemetry = False
 litellm.drop_params = True
 
-_CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+_CODE_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
 
 
 class AIProviderError(RuntimeError):
@@ -48,17 +48,30 @@ class AIConfigurationError(RuntimeError):
 
 def parse_llm_analysis_json(raw_content: str) -> LLMAnalysisOutput:
     """
-    Strips optional markdown code fences and strictly validates the LLM JSON payload
-    against `LLMAnalysisOutput`.
+    Extracts plain or fenced JSON and strictly validates it against LLMAnalysisOutput.
     """
-    cleaned = _CODE_FENCE_RE.sub("", (raw_content or "").strip()).strip()
-    if not cleaned:
+    content = (raw_content or "").strip()
+    if not content:
         raise AIProviderError("LLM returned an empty response payload.")
-    try:
-        raw_obj = json.loads(cleaned)
-        return LLMAnalysisOutput.model_validate(raw_obj)
-    except (json.JSONDecodeError, ValidationError) as exc:
-        raise AIProviderError(f"LLM output failed schema validation: {exc}") from exc
+
+    candidates = [content]
+    candidates.extend(match.group(1).strip() for match in _CODE_FENCE_RE.finditer(content))
+    schema_error: ValidationError | None = None
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            raw_obj = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        try:
+            return LLMAnalysisOutput.model_validate(raw_obj)
+        except ValidationError as exc:
+            schema_error = exc
+
+    if schema_error is not None:
+        raise AIProviderError(f"LLM output failed schema validation: {schema_error}") from schema_error
+    raise AIProviderError("LLM output failed schema validation: no valid JSON object found.")
 
 
 class MultiModelRouter:
@@ -70,18 +83,22 @@ class MultiModelRouter:
     Never falls back to stub responses if a real provider fails.
     """
 
-    PROVIDER_MODEL_MAP = {
-        "gemini": "gemini/gemini-3.8-flash",
-        "claude": "claude-sonnet-4-20250514",
-        "openai": "gpt-4o",
-    }
-
     @classmethod
     def _ordered_providers(cls, preferred_provider: str) -> list[str]:
         all_providers = ["gemini", "claude", "openai"]
         if preferred_provider in all_providers:
             return [preferred_provider] + [p for p in all_providers if p != preferred_provider]
         return all_providers
+
+    @staticmethod
+    def _model_for_provider(provider: str) -> str:
+        if provider == "gemini":
+            return settings.GEMINI_MODEL
+        if provider == "claude":
+            return settings.ANTHROPIC_MODEL
+        if provider == "openai":
+            return settings.OPENAI_MODEL
+        return "gemini/gemini-2.0-flash"
 
     @classmethod
     async def resolve_provider_key(
@@ -227,7 +244,7 @@ class MultiModelRouter:
         user_message: str,
         temperature: float,
     ) -> dict[str, Any]:
-        model = cls.PROVIDER_MODEL_MAP.get(provider, "gemini/gemini-2.0-flash")
+        model = cls._model_for_provider(provider)
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},

@@ -12,6 +12,10 @@ All notable changes to Enterprise CRM are documented in this file following [Kee
 - **Revenue Analytics, Attribution & CSV Data Transfer**: Added `/api/v1/analytics/forecast`, `/funnel`, `/attribution`, `/snapshots`, `/waterfall`, and `/win-loss` endpoints with exact `Decimal` USD normalization, Sales Velocity, Pipeline Coverage Ratio, bidirectional engagement health (`last_inbound_activity_at` vs `last_outbound_activity_at` Ghosting Risk detection), Pipeline Waterfall Bridge (`pipeline_snapshots`), structured Win/Loss Matrix (`loss_category`, `competitor_name`, `missing_feature_tag`), and `source_channel` revenue attribution; added Bundled CSV Importer (`/api/v1/data/contacts/import`) creating accounts, contacts, and deals with automatic HubSpot/Salesforce header mapping, Dry-Run preview, deduplication, quarantine reporting, and atomic 1-click batch rollback (`POST /api/v1/data/imports/{batch_id}/rollback` via `import_batches`), plus formula-sanitized CSV exports (`/api/v1/data/export/{entity}`).
 - **Keyboard Flow & Inline Stage-Gate UX**: Added `X-Stage-Gate-Fields` header metadata on HTTP `422` stage-gate rejections driving an inline 1-field popover in `DealKanbanBoard` with auto-retry on save, structured Closed-Lost taxonomy inputs, `j`/`k`/`ArrowDown`/`ArrowUp` + `Space`/`Enter` keyboard row navigation in `DealDataGrid`, cursor pagination (`X-Next-Cursor`) on master listings, live `Cmd+K` contact/deal search, debounced server-side contact filtering, and stale-deal badges (`>14d`) on Kanban cards.
 - Community and governance files: `LICENSE` (PolyForm Noncommercial 1.0.0), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), issue and pull request templates, `CODEOWNERS`, and Dependabot configuration.
+- AI provider models are configurable through the `GEMINI_MODEL`, `ANTHROPIC_MODEL`, and `OPENAI_MODEL` environment settings.
+
+### Fixed
+- AI Copilot parsing now accepts fenced JSON surrounded by provider commentary while preserving strict response-schema validation.
 
 ## [1.0.0] - 2026-11-20
 
